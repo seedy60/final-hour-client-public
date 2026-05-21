@@ -7,6 +7,7 @@ Final Hour is an open-source, audio-based game inspired by the Zombies mode in t
 *   **Online Co-op Gameplay:** Play with friends and other players online to survive against the undead.
 *   **Inspired by Call of Duty Zombies:** Experience gameplay mechanics, weapons, and items reminiscent of the Aether timeline in the Call of Duty Zombies series.
 *   **Immersive Audio Experience:** Designed as an audio game, Final Hour provides a rich and immersive soundscape for players.
+*   **In-game map builder:** Builders construct maps from inside the game by walking to corners and placing elements with a keystroke. No external XML editing required.
 *   **Cross-Platform:** While primarily developed on Windows, the game is built with cross-platform compatibility in mind.
 
 ## Getting Started
@@ -70,6 +71,42 @@ To build an executable version of the game, follow these steps:
     ```sh
     pipenv run build.bat
     ```
+
+## Building maps in-game
+
+Players with the builder role can construct maps without leaving the game. The workflow anchors every edit to your character's position: walk to a corner, mark it, walk to the opposite corner, mark it, then pick an element type.
+
+### Default key bindings
+
+| key | action |
+| --- | --- |
+| `m` | mark the next corner at your position (cycles 1 → 2 → 1) |
+| `shift+m` | clear both corners |
+| `b` | speak the platforms, zones and doors within reach |
+| `shift+b` | speak your current corner positions and the bounding box |
+| `n` | open the place menu (platform, door, zone, spawn, …) |
+| `shift+n` | re-run your last `/place` or `/here` |
+| `u` | open the point-element menu (perk machine, power switch, window, …) |
+| `t` | open the macro menu (`/room`, `/ladder`, `/skylight`, `/doorway`) |
+| `delete` | undo the last builder edit |
+| `shift+delete` | redo |
+| `end` | delete the element at your position |
+
+All key bindings are configurable from the in-game options menu.
+
+### Chat-command reference
+
+Every key binding is just a shortcut for a chat command. Type `/builderhelp` in chat for the full list, including arguments. Highlights:
+
+- `/mark`, `/unmark`, `/marks`
+- `/place <type> [args]` — `platform`, `door`, `zone`, `playerSpawn`, `zombieSpawn`, `wallbuy`, `interactable`, `ambience`, `soundSource`, `music`, `reverb`
+- `/here <type> [args]` — `perkMachine`, `powerSwitch`, `window`, `pannable`
+- `/room`, `/ladder`, `/skylight`, `/doorway` — one-command macros
+- `/del`, `/setid`, `/setattr` — manage existing elements
+- `/probe [r]`, `/listids`, `/whatami` — audit nearby elements
+- `/undo`, `/redo`, `/repeat`
+
+Edits are validated and persisted to the server's `maps/<name>.map` immediately. Undo keeps the last 50 changes per map in memory.
 
 ## Contributing
 

@@ -40,5 +40,12 @@
     "v":"speak_zone",
     "`":"export_buffers",
     "f6": "toggle_beacons",
-    "g": "voice_chat"
+    "g": "voice_chat",
+    "m": "builder_mark",
+    "n": "builder_place",
+    "t": "builder_macro",
+    "u": "builder_here",
+    "b": "builder_probe",
+    "delete": "builder_undo",
+    "end": "builder_delete_nearby"
 }

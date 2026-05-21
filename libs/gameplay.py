@@ -133,6 +133,13 @@ class Gameplay(state.State):
                 "export_buffers", pygame.K_BACKQUOTE
             ): lambda mod: buffer.export_buffers(),
             kc.get("toggle_beacons", pygame.K_F6): lambda mod: self.toggle_beacons(mod),
+            kc.get("builder_mark", pygame.K_m): self.builder_mark,
+            kc.get("builder_place", pygame.K_n): self.builder_place,
+            kc.get("builder_macro", pygame.K_t): self.builder_macro,
+            kc.get("builder_here", pygame.K_u): self.builder_here,
+            kc.get("builder_probe", pygame.K_b): self.builder_probe,
+            kc.get("builder_undo", pygame.K_DELETE): self.builder_undo,
+            kc.get("builder_delete_nearby", pygame.K_END): self.builder_delete_nearby,
         }
         self.keys_released = {
             kc.get("voice_chat", pygame.K_g): self.voice_chat_stop,
@@ -746,4 +753,96 @@ class Gameplay(state.State):
         self.voice_chat.recording = False
         self.game.call_after(40, self.voice_chat.voice_chat_finish)
         self.game.direct_soundgroup.play("ui/voxoff.ogg")
+
+    # ---- Builder mode actions ----
+
+    def _send_chat(self, message):
+        self.game.network.send(consts.CHANNEL_CHAT, "chat", {"message": message})
+
+    def builder_mark(self, mod):
+        if mod & pygame.KMOD_SHIFT:
+            self._send_chat("/unmark")
+        else:
+            self._send_chat("/mark")
+
+    def builder_probe(self, mod):
+        if mod & pygame.KMOD_SHIFT:
+            self._send_chat("/marks")
+        else:
+            self._send_chat("/probe")
+
+    def builder_undo(self, mod):
+        if mod & pygame.KMOD_SHIFT:
+            self._send_chat("/redo")
+        else:
+            self._send_chat("/undo")
+
+    def builder_delete_nearby(self, mod):
+        self._send_chat("/del")
+
+    def builder_place(self, mod):
+        if mod & pygame.KMOD_SHIFT:
+            self._send_chat("/repeat")
+            return
+        m = menu.Menu(self.game, "Place which element?", parrent=self)
+        items = [
+            ("Platform", lambda: self._builder_prompt("Tile type (wood, wallwood, metal, wallglass, ...):", "/place platform ", default="wood")),
+            ("Door", lambda: self._builder_prompt("walltype tiletype minpoints:", "/place door ", default="wallwood wood 0")),
+            ("Zone", lambda: self._builder_prompt("Zone name:", "/place zone ")),
+            ("Player spawn", lambda: self._builder_send_and_close("/place playerSpawn")),
+            ("Zombie spawn", lambda: self._builder_prompt("[name] [zBound]:", "/place zombieSpawn ", default="")),
+            ("Wallbuy", lambda: self._builder_prompt("weapon weaponCost ammoCost:", "/place wallbuy ")),
+            ("Interactable", lambda: self._builder_send_and_close("/place interactable")),
+            ("Ambience", lambda: self._builder_prompt("sound [volume]:", "/place ambience ")),
+            ("Sound source", lambda: self._builder_prompt("sound [volume]:", "/place soundSource ")),
+            ("Music", lambda: self._builder_prompt("sound:", "/place music ")),
+            ("Reverb", lambda: self._builder_prompt("key=value pairs (e.g. decayTime=0.9 density=0.3):", "/place reverb ")),
+            ("Cancel", self.pop_last_substate),
+        ]
+        m.add_items(items)
+        menus.set_default_sounds(m)
+        self.add_substate(m)
+
+    def builder_here(self, mod):
+        m = menu.Menu(self.game, "Place which point element here?", parrent=self)
+        items = [
+            ("Perk machine", lambda: self._builder_prompt("perk [price] [quantity] [sound]:", "/here perkMachine ")),
+            ("Power switch", lambda: self._builder_prompt("[cost]:", "/here powerSwitch ", default="0")),
+            ("Window", lambda: self._builder_prompt("[hp]:", "/here window ", default="1000")),
+            ("Pannable sound", lambda: self._builder_prompt("sound [volume]:", "/here pannable ")),
+            ("Cancel", self.pop_last_substate),
+        ]
+        m.add_items(items)
+        menus.set_default_sounds(m)
+        self.add_substate(m)
+
+    def builder_macro(self, mod):
+        m = menu.Menu(self.game, "Run which macro?", parrent=self)
+        items = [
+            ("Room (defaults)", lambda: self._builder_send_and_close("/room")),
+            ("Room (custom)", lambda: self._builder_prompt("walls=... floor=... ceil=... door=N|S|E|W|none:", "/room ", default="walls=wallwood floor=wood ceil=wood door=N")),
+            ("Ladder", lambda: self._builder_prompt("dir=N|S|E|W type=metal:", "/ladder ", default="dir=N type=metal")),
+            ("Skylight", lambda: self._builder_prompt("walltype=... floor=...:", "/skylight ", default="walltype=wallglass floor=wood")),
+            ("Doorway", lambda: self._builder_prompt("walltype tiletype minpoints:", "/doorway ", default="wallwood wood 0")),
+            ("Cancel", self.pop_last_substate),
+        ]
+        m.add_items(items)
+        menus.set_default_sounds(m)
+        self.add_substate(m)
+
+    def _builder_send_and_close(self, cmd):
+        self._send_chat(cmd)
+        self.pop_last_substate()
+
+    def _builder_prompt(self, prompt, cmd_prefix, default=""):
+        def handler(message):
+            self.pop_last_substate()
+            text = message.strip()
+            cmd = cmd_prefix + text if text else cmd_prefix.rstrip()
+            if not cmd.strip().startswith("/"):
+                return
+            self._send_chat(cmd.rstrip())
+        self.replace_last_substate(
+            self.game.input.run(prompt, default=default, handeler=handler)
+        )
 
