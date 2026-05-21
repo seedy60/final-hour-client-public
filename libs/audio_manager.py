@@ -127,8 +127,8 @@ class AudioManager():
             )
             self.buffers[path] = buffer
             return buffer
-        except:
-            print("unable to load file")
+        except Exception as e:
+            print(f"unable to load file {path}: {e}")
             return None
 
     def set_volume(self, cat, volume):

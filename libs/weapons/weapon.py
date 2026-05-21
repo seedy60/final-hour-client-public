@@ -34,7 +34,7 @@ class weapon:
         self.speed_reload_path = f"{sounds_path}/speed_reload"
         self.fire_time = fire_time
         self.reload_time = reload_time
-        if reload_time == -1:
+        if reload_time == -1 and not melee:
             with contextlib.suppress(Exception):
                 self.reload_time = (
                     self.game.audio_mngr.load_buffer(
