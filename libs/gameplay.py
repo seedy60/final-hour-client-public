@@ -756,6 +756,22 @@ class Gameplay(state.State):
 
     # ---- Builder mode actions ----
 
+    BUILDER_TILE_TYPES = [
+        "wood", "wallwood", "wall", "wallglass", "wallwindow",
+        "metal", "carpet", "concrete", "snow", "air",
+        "deep_water", "underwater",
+    ]
+    BUILDER_WEAPON_NAMES = [
+        "357_magnum_revolver", "ak47", "bolt_action_rifle", "desert_eagle",
+        "dragunov_sniper", "hunting_rifle", "kar98k", "knife", "m16",
+        "m1911", "m2", "m60", "mg34", "mp7", "p90", "shotgun",
+        "silenced_beretta", "sks", "sword", "utr45",
+    ]
+    BUILDER_PERK_NAMES = [
+        "juggernog", "double_tap_root_beer", "quick_revive", "speed_cola",
+    ]
+    BUILDER_DIRECTIONS = ["N", "S", "E", "W"]
+
     def _send_chat(self, message):
         self.game.network.send(consts.CHANNEL_CHAT, "chat", {"message": message})
 
@@ -780,69 +796,227 @@ class Gameplay(state.State):
     def builder_delete_nearby(self, mod):
         self._send_chat("/del")
 
+    # ---- Builder menu plumbing ----
+
+    def _open_menu(self, title, items):
+        """items: list of (label, callable). The menu pops itself before
+        calling each callable so the callable can open the next step
+        without leaving the previous menu on the stack."""
+        def wrap(cb):
+            def wrapped():
+                self.pop_last_substate()
+                cb()
+            return wrapped
+        m = menu.Menu(self.game, title, parrent=self)
+        wrapped = [(label, wrap(cb)) for label, cb in items]
+        wrapped.append(("Cancel", self.pop_last_substate))
+        m.add_items(wrapped)
+        menus.set_default_sounds(m)
+        self.add_substate(m)
+
+    def _ask_input(self, prompt, callback, default=""):
+        """Open a text input. After submit, pop the input and call
+        callback(text). Empty input cancels the chain."""
+        def handler(message):
+            self.pop_last_substate()
+            text = message.strip()
+            if not text:
+                return
+            callback(text)
+        self.add_substate(
+            self.game.input.run(prompt, default=default, handeler=handler)
+        )
+
+    def _pick_from(self, title, values, on_pick):
+        items = [(v, (lambda v=v: on_pick(v))) for v in values]
+        self._open_menu(title, items)
+
+    def _pick_tile_type(self, on_pick, title="Pick a tile type"):
+        self._pick_from(title, self.BUILDER_TILE_TYPES, on_pick)
+
+    def _pick_direction(self, on_pick, title="Pick a direction", include_none=False):
+        dirs = list(self.BUILDER_DIRECTIONS)
+        if include_none:
+            dirs.append("none")
+        self._pick_from(title, dirs, on_pick)
+
+    def _pick_perk(self, on_pick, title="Pick a perk"):
+        self._pick_from(title, self.BUILDER_PERK_NAMES, on_pick)
+
+    def _pick_weapon(self, on_pick, title="Pick a weapon"):
+        self._pick_from(title, self.BUILDER_WEAPON_NAMES, on_pick)
+
+    # ---- Builder top-level menus ----
+
     def builder_place(self, mod):
         if mod & pygame.KMOD_SHIFT:
             self._send_chat("/repeat")
             return
-        m = menu.Menu(self.game, "Place which element?", parrent=self)
         items = [
-            ("Platform", lambda: self._builder_prompt("Tile type (wood, wallwood, metal, wallglass, ...):", "/place platform ", default="wood")),
-            ("Door", lambda: self._builder_prompt("walltype tiletype minpoints:", "/place door ", default="wallwood wood 0")),
-            ("Zone", lambda: self._builder_prompt("Zone name:", "/place zone ")),
-            ("Player spawn", lambda: self._builder_send_and_close("/place playerSpawn")),
-            ("Zombie spawn", lambda: self._builder_prompt("[name] [zBound]:", "/place zombieSpawn ", default="")),
-            ("Wallbuy", lambda: self._builder_prompt("weapon weaponCost ammoCost:", "/place wallbuy ")),
-            ("Interactable", lambda: self._builder_send_and_close("/place interactable")),
-            ("Ambience", lambda: self._builder_prompt("sound [volume]:", "/place ambience ")),
-            ("Sound source", lambda: self._builder_prompt("sound [volume]:", "/place soundSource ")),
-            ("Music", lambda: self._builder_prompt("sound:", "/place music ")),
-            ("Reverb", lambda: self._builder_prompt("key=value pairs (e.g. decayTime=0.9 density=0.3):", "/place reverb ")),
-            ("Cancel", self.pop_last_substate),
+            ("Platform", self._build_place_platform),
+            ("Door", self._build_place_door),
+            ("Zone", self._build_place_zone),
+            ("Player spawn", lambda: self._send_chat("/place playerSpawn")),
+            ("Zombie spawn", self._build_place_zombie_spawn),
+            ("Wallbuy", self._build_place_wallbuy),
+            ("Interactable", lambda: self._send_chat("/place interactable")),
+            ("Ambience", self._build_place_ambience),
+            ("Sound source", self._build_place_soundsource),
+            ("Music", self._build_place_music),
+            ("Reverb (preset)", self._build_place_reverb),
         ]
-        m.add_items(items)
-        menus.set_default_sounds(m)
-        self.add_substate(m)
+        self._open_menu("Place which element?", items)
 
     def builder_here(self, mod):
-        m = menu.Menu(self.game, "Place which point element here?", parrent=self)
         items = [
-            ("Perk machine", lambda: self._builder_prompt("perk [price] [quantity] [sound]:", "/here perkMachine ")),
-            ("Power switch", lambda: self._builder_prompt("[cost]:", "/here powerSwitch ", default="0")),
-            ("Window", lambda: self._builder_prompt("[hp]:", "/here window ", default="1000")),
-            ("Pannable sound", lambda: self._builder_prompt("sound [volume]:", "/here pannable ")),
-            ("Cancel", self.pop_last_substate),
+            ("Perk machine", self._build_here_perkmachine),
+            ("Power switch", self._build_here_powerswitch),
+            ("Window", self._build_here_window),
+            ("Pannable sound", self._build_here_pannable),
         ]
-        m.add_items(items)
-        menus.set_default_sounds(m)
-        self.add_substate(m)
+        self._open_menu("Place which point element here?", items)
 
     def builder_macro(self, mod):
-        m = menu.Menu(self.game, "Run which macro?", parrent=self)
         items = [
-            ("Room (defaults)", lambda: self._builder_send_and_close("/room")),
-            ("Room (custom)", lambda: self._builder_prompt("walls=... floor=... ceil=... door=N|S|E|W|none:", "/room ", default="walls=wallwood floor=wood ceil=wood door=N")),
-            ("Ladder", lambda: self._builder_prompt("dir=N|S|E|W type=metal:", "/ladder ", default="dir=N type=metal")),
-            ("Skylight", lambda: self._builder_prompt("walltype=... floor=...:", "/skylight ", default="walltype=wallglass floor=wood")),
-            ("Doorway", lambda: self._builder_prompt("walltype tiletype minpoints:", "/doorway ", default="wallwood wood 0")),
-            ("Cancel", self.pop_last_substate),
+            ("Room (defaults)", lambda: self._send_chat("/room")),
+            ("Room (custom)", self._build_room_custom),
+            ("Ladder", self._build_ladder),
+            ("Skylight", self._build_skylight),
+            ("Doorway", self._build_doorway),
         ]
-        m.add_items(items)
-        menus.set_default_sounds(m)
-        self.add_substate(m)
+        self._open_menu("Run which macro?", items)
 
-    def _builder_send_and_close(self, cmd):
-        self._send_chat(cmd)
-        self.pop_last_substate()
+    # ---- /place builders ----
 
-    def _builder_prompt(self, prompt, cmd_prefix, default=""):
-        def handler(message):
-            self.pop_last_substate()
-            text = message.strip()
-            cmd = cmd_prefix + text if text else cmd_prefix.rstrip()
-            if not cmd.strip().startswith("/"):
-                return
-            self._send_chat(cmd.rstrip())
-        self.replace_last_substate(
-            self.game.input.run(prompt, default=default, handeler=handler)
-        )
+    def _build_place_platform(self):
+        self._pick_tile_type(lambda t: self._send_chat(f"/place platform {t}"))
+
+    def _build_place_door(self):
+        def on_walltype(walltype):
+            def on_tiletype(tiletype):
+                def on_minpoints(minpoints):
+                    self._send_chat(f"/place door {walltype} {tiletype} {minpoints}")
+                self._ask_input("Minimum points to open (0 for none):", on_minpoints, default="0")
+            self._pick_tile_type(on_tiletype, title="Open tile type")
+        self._pick_tile_type(on_walltype, title="Closed wall type")
+
+    def _build_place_zone(self):
+        self._ask_input("Zone name:", lambda name: self._send_chat(f"/place zone {name}"))
+
+    def _build_place_zombie_spawn(self):
+        def on_choice(choice):
+            if choice == "active (no group name)":
+                self._send_chat("/place zombieSpawn")
+            else:
+                self._ask_input(
+                    "Group name (referenced by door 'activates'):",
+                    lambda n: self._send_chat(f"/place zombieSpawn {n}"),
+                )
+        self._pick_from("Spawn zone setup", [
+            "active (no group name)",
+            "named (inactive until a door activates it)",
+        ], on_choice)
+
+    def _build_place_wallbuy(self):
+        def on_weapon(weapon):
+            def on_cost(cost):
+                def on_ammo(ammo):
+                    self._send_chat(f"/place wallbuy {weapon} {cost} {ammo}")
+                self._ask_input("Ammo cost (points):", on_ammo, default="100")
+            self._ask_input("Weapon cost (points):", on_cost, default="1000")
+        self._pick_weapon(on_weapon)
+
+    def _build_place_ambience(self):
+        def on_sound(sound):
+            def on_volume(volume):
+                self._send_chat(f"/place ambience {sound} {volume}")
+            self._ask_input("Volume (1-100):", on_volume, default="100")
+        self._ask_input("Sound path (e.g., ambience/wind1.ogg):", on_sound)
+
+    def _build_place_soundsource(self):
+        def on_sound(sound):
+            def on_volume(volume):
+                self._send_chat(f"/place soundSource {sound} {volume}")
+            self._ask_input("Volume (1-100):", on_volume, default="50")
+        self._ask_input("Sound path (e.g., ambience/water1.ogg):", on_sound)
+
+    def _build_place_music(self):
+        self._ask_input("Music file (e.g., 3.ogg):", lambda s: self._send_chat(f"/place music {s}"))
+
+    def _build_place_reverb(self):
+        presets = [
+            ("Small room",   "decayTime=0.5 density=0.2 diffusion=0.5"),
+            ("Medium room",  "decayTime=0.9 density=0.3 diffusion=0.6"),
+            ("Large hall",   "decayTime=1.8 density=0.5 diffusion=0.8"),
+            ("Cathedral",    "decayTime=3.5 density=0.7 diffusion=0.9"),
+            ("Cave",         "decayTime=2.5 density=0.4 diffusion=0.7"),
+        ]
+        items = [
+            (label, (lambda kv=kv: self._send_chat(f"/place reverb {kv}")))
+            for label, kv in presets
+        ]
+        items.append(("Custom key=value pairs", lambda: self._ask_input(
+            "key=value pairs (e.g. decayTime=0.9 density=0.3):",
+            lambda kv: self._send_chat(f"/place reverb {kv}"),
+            default="decayTime=0.9 density=0.3",
+        )))
+        self._open_menu("Reverb preset", items)
+
+    # ---- /here builders ----
+
+    def _build_here_perkmachine(self):
+        def on_perk(perk):
+            def on_price(price):
+                self._send_chat(f"/here perkMachine {perk} {price}")
+            self._ask_input("Price (points):", on_price, default="2500")
+        self._pick_perk(on_perk)
+
+    def _build_here_powerswitch(self):
+        self._ask_input("Cost (points, 0 for free):", lambda c: self._send_chat(f"/here powerSwitch {c}"), default="0")
+
+    def _build_here_window(self):
+        self._ask_input("Window HP:", lambda h: self._send_chat(f"/here window {h}"), default="1000")
+
+    def _build_here_pannable(self):
+        def on_sound(sound):
+            def on_volume(volume):
+                self._send_chat(f"/here pannable {sound} {volume}")
+            self._ask_input("Volume (1-100):", on_volume, default="100")
+        self._ask_input("Sound path:", on_sound)
+
+    # ---- macro builders ----
+
+    def _build_room_custom(self):
+        def on_walls(walls):
+            def on_floor(floor):
+                def on_ceil(ceil):
+                    def on_door(door):
+                        self._send_chat(f"/room walls={walls} floor={floor} ceil={ceil} door={door}")
+                    self._pick_direction(on_door, title="Door on which wall?", include_none=True)
+                self._pick_tile_type(on_ceil, title="Ceiling type")
+            self._pick_tile_type(on_floor, title="Floor type")
+        self._pick_tile_type(on_walls, title="Wall type")
+
+    def _build_ladder(self):
+        def on_dir(d):
+            def on_type(t):
+                self._send_chat(f"/ladder dir={d} type={t}")
+            self._pick_tile_type(on_type, title="Ladder material")
+        self._pick_direction(on_dir, title="Ladder on which wall?")
+
+    def _build_skylight(self):
+        def on_walltype(w):
+            def on_floor(f):
+                self._send_chat(f"/skylight walltype={w} floor={f}")
+            self._pick_tile_type(on_floor, title="Skylight floor frame")
+        self._pick_tile_type(on_walltype, title="Skylight wall type")
+
+    def _build_doorway(self):
+        def on_walltype(w):
+            def on_tiletype(t):
+                def on_minpoints(m):
+                    self._send_chat(f"/doorway {w} {t} {m}")
+                self._ask_input("Min points to open (0 for none):", on_minpoints, default="0")
+            self._pick_tile_type(on_tiletype, title="Open tile type")
+        self._pick_tile_type(on_walltype, title="Closed wall type")
 
