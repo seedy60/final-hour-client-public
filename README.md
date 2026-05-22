@@ -130,8 +130,27 @@ Every key binding is just a shortcut for a chat command. Type `/builderhelp` in 
 - `/del`, `/setid`, `/setattr` — manage existing elements
 - `/probe [r]`, `/listids`, `/whatami` — audit nearby elements
 - `/undo`, `/redo`, `/repeat`
+- `/preview`, `/commit`, `/cancel` — see below
 
 Edits are validated and persisted to the server's `maps/<name>.map` immediately. Undo keeps the last 50 changes per map in memory.
+
+### Preview mode (try before commit)
+
+If you can't easily visualize what a wall or a `/room` will look like, build it as a ghost first:
+
+```
+/preview
+/mark         (corner 1)
+/mark         (corner 2)
+/room walls=wallwood floor=wood door=N
+```
+
+The room is placed for real — walls block, floors hold you up, you can walk through the doorway — but every element is tagged `class="ghost"` and remembered. Walk through, decide whether it works, then either:
+
+- `/commit` — strip the ghost tag, making the structure permanent.
+- `/cancel` — delete every preview element in one batch and try again.
+
+You stay in preview mode across as many `/place`, `/here`, and macro commands as you like; `/commit` or `/cancel` operate on the whole accumulated batch. Placement feedback gets a `(preview)` suffix while preview mode is on, so you always know which state you're in.
 
 ## Contributing
 
