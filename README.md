@@ -129,6 +129,7 @@ Every key binding is just a shortcut for a chat command. Type `/builderhelp` in 
 - `/room`, `/ladder`, `/skylight`, `/doorway` — one-command macros
 - `/del`, `/setid`, `/setattr` — manage existing elements
 - `/probe [r]`, `/listids`, `/whatami` — audit nearby elements
+- `/tp <x> <y> <z>` — teleport yourself in the current map without losing markers or preview state. `/tp 1` / `/tp 2` jumps to the corresponding marker; `/tp center` to the midpoint.
 - `/undo`, `/redo`, `/repeat`
 - `/preview`, `/commit`, `/cancel` — see below
 
