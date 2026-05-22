@@ -76,6 +76,31 @@ To build an executable version of the game, follow these steps:
 
 Players with the builder role can construct maps without leaving the game. The workflow anchors every edit to your character's position: walk to a corner, mark it, walk to the opposite corner, mark it, then pick an element type.
 
+### Getting builder access
+
+Builder commands are gated on the server. You need one of:
+
+- Your username listed in the server's `contributors.txt` (contributors are automatically builders), or
+- An existing contributor running `/set builder <your-username> yes` in chat.
+
+If neither applies, ask whoever runs your server to grant it. Once you have access, `/builderhelp` in chat lists every builder command.
+
+### Creating a new map
+
+Builder edits target your current map, so you usually want a fresh one rather than modifying `main`. From chat:
+
+```
+/mkmap <name> <minx> <maxx> <miny> <maxy> <minz> <maxz>
+```
+
+Example — a 40 × 40 footprint, 20 tiles tall:
+
+```
+/mkmap mybar -20 20 -20 20 0 20
+```
+
+`/mkmap` creates the map file at `maps/<name>.map`, registers it server-side, and teleports you in at `(minx+1, miny+1, minz+1)`. To return to a map later use `/chmap <name>`, or `/chmap` on its own to pick from a menu.
+
 ### Default key bindings
 
 | key | action |
